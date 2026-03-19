@@ -1,268 +1,194 @@
-import { useState, useEffect } from "react";
+import React, { useState } from "react";
 import "./App.css";
 
 export default function App() {
-  const [viewStack, setViewStack] = useState(["master"]);
-  const [focusNode, setFocusNode] = useState(null);
-  const [timeTick, setTimeTick] = useState(Date.now());
+  const [activeDept, setActiveDept] = useState(null);
 
-  const currentView = viewStack[viewStack.length - 1];
+  const departments = [
+    { id: "kitchen", label: "Kitchen", value: 72, revenuePerHour: 2300 },
+    { id: "housekeeping", label: "Housekeeping", value: 38, revenuePerHour: 900 },
+    { id: "frontdesk", label: "Front Desk", value: 45, revenuePerHour: 1200 },
+  ];
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeTick(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const baseData = {
-    master: [
-      { id: "Rooms", strain: 72 },
-      { id: "Housekeeping", strain: 55 },
-      { id: "Front Desk", strain: 48 },
-      { id: "Food & Beverage", strain: 63 },
-      { id: "Culinary", strain: 70 },
-      { id: "Engineering", strain: 80 },
-      { id: "Security", strain: 45 },
+  const subDepartments = {
+    kitchen: [
+      { id: "line", label: "Line", value: 80 },
+      { id: "prep", label: "Prep", value: 60 },
+      { id: "dish", label: "Dish", value: 50 },
     ],
-
-    Engineering: [
-      { id: "Electrical", strain: 60 },
-      { id: "Plumbing", strain: 75 },
-      { id: "HVAC", strain: 82 },
+    housekeeping: [
+      { id: "rooms", label: "Rooms", value: 40 },
+      { id: "laundry", label: "Laundry", value: 35 },
     ],
-
-    Rooms: [
-      { id: "Housekeeping", strain: 60 },
-      { id: "Maintenance", strain: 78 },
-      { id: "Guest Issues", strain: 85 },
-    ],
-
-    Housekeeping: [
-      { id: "Cleaning", strain: 58 },
-      { id: "Laundry", strain: 62 },
-      { id: "Supplies", strain: 30 },
-    ],
-
-    Laundry: [
-      { id: "Machines", strain: 75 },
-      { id: "Staff", strain: 65 },
-    ],
-
-    "Front Desk": [
-      { id: "Check-In", strain: 50 },
-      { id: "Guest Services", strain: 45 },
-      { id: "Billing", strain: 35 },
-      { id: "Reservations", strain: 55 },
-    ],
-
-    "Food & Beverage": [
-      { id: "Restaurants", strain: 65 },
-      { id: "Bars", strain: 50 },
-      { id: "Banquets", strain: 72 },
-    ],
-
-    Culinary: [
-      { id: "Hot Line", strain: 80 },
-      { id: "Cold Prep", strain: 55 },
-      { id: "Pastry", strain: 35 },
-    ],
-
-    Security: [
-      { id: "Surveillance", strain: 30 },
-      { id: "Patrol", strain: 45 },
-      { id: "Incidents", strain: 78 },
+    frontdesk: [
+      { id: "checkin", label: "Check-In", value: 50 },
+      { id: "concierge", label: "Concierge", value: 30 },
     ],
   };
 
-  const propagationMap = {
-    HVAC: [
-      { target: "Rooms", impact: 0.25 },
-      { target: "Front Desk", impact: 0.15 },
-    ],
-    Maintenance: [{ target: "Rooms", impact: 0.2 }],
-    Laundry: [{ target: "Housekeeping", impact: 0.2 }],
-    Incidents: [{ target: "Security", impact: 0.3 }],
+  /* =========================
+     VISUAL ENGINE
+  ========================= */
+
+  const getColor = (value) => {
+    if (value >= 70) return "#ff4d4d";
+    if (value >= 40) return "#ffd24d";
+    return "#00c8ff";
   };
 
-  const applyPropagation = (data) => {
-    let updated = JSON.parse(JSON.stringify(data));
-
-    Object.values(data).flat().forEach((node) => {
-      const effects = propagationMap[node.id];
-      if (effects) {
-        effects.forEach(({ target, impact }) => {
-          updated.master.forEach((m) => {
-            if (m.id === target) {
-              m.strain += node.strain * impact;
-            }
-          });
-        });
-      }
-    });
-
-    return updated;
+  const getRadius = (value) => {
+    if (value >= 70) return 18;
+    if (value >= 40) return 32;
+    return 48;
   };
 
-  const data = applyPropagation(baseData);
-
-  // 🔥 UPDATED RECOMMENDATIONS WITH BRAND LANGUAGE
-  const generateRecommendations = () => {
-    const recs = [];
-
-    const get = (id) =>
-      data.master.find((d) => d.id === id)?.strain || 0;
-
-    const hvac = 82;
-    const rooms = get("Rooms");
-    const security = get("Security");
-
-    if (hvac > 75) {
-      recs.push({
-        text: "Deploy engineering to HVAC immediately",
-        priority: 10,
-        impact: "Cooling failure spreading to guest rooms",
-        oeo: 12000,
-        revenue: 8000,
-        gss: 0.03,
-      });
-    }
-
-    if (rooms > 75) {
-      recs.push({
-        text: "Delay non-essential room turns",
-        priority: 8,
-        impact: "Arrival delays impacting guests",
-        oeo: 6000,
-        revenue: 4000,
-        gss: 0.02,
-      });
-    }
-
-    if (security > 70) {
-      recs.push({
-        text: "Increase security patrol presence",
-        priority: 6,
-        impact: "Incident escalation risk",
-        oeo: 3000,
-        revenue: 1500,
-        gss: 0.01,
-      });
-    }
-
-    return recs.sort((a, b) => b.priority - a.priority);
-  };
-
-  const recommendations = generateRecommendations();
-  const topRec = recommendations[0];
-
-  const getColor = (strain) => {
-    if (strain > 75) return "red";
-    if (strain > 50) return "yellow";
-    return "green";
-  };
-
-  const getPulseStyle = (strain) => ({
-    animationDuration: `${2 - strain / 100}s`,
-    transform: `scale(${1 + strain / 300})`,
-  });
-
-  const goForward = (node) => {
-    if (!data[node.id]) return;
-
-    setFocusNode(node);
-
-    setTimeout(() => {
-      setViewStack((prev) => [...prev, node.id]);
-      setFocusNode(null);
-    }, 300);
-  };
-
-  const goBack = () => {
-    setViewStack((prev) => prev.slice(0, -1));
-  };
-
-  const getRadialPosition = (index, total, radius = 240) => {
+  const getPosition = (index, total, value) => {
     const angle = (index / total) * 2 * Math.PI;
-    const cx = window.innerWidth / 2;
-    const cy = window.innerHeight / 2;
+    const radius = getRadius(value);
 
     return {
-      left: cx + radius * Math.cos(angle),
-      top: cy + radius * Math.sin(angle),
+      left: `${50 + radius * Math.cos(angle)}%`,
+      top: `${50 + radius * Math.sin(angle)}%`,
     };
   };
 
+  const renderNodes = (items, clickable = false) =>
+    items.map((item, i) => {
+      const pos = getPosition(i, items.length, item.value);
+
+      return (
+        <div
+          key={item.id}
+          className="node"
+          style={{ ...pos, background: getColor(item.value) }}
+          onClick={() => clickable && setActiveDept(item)}
+        >
+          <div className="label">{item.label}</div>
+        </div>
+      );
+    });
+
+  /* =========================
+     💰 REVENUE + TIME ENGINE
+  ========================= */
+
+  const getRecommendation = (dept, subs = []) => {
+    const value = dept.value || 0;
+    const revenue = dept.revenuePerHour || 1500;
+
+    const highestSub =
+      subs.length > 0
+        ? subs.reduce((a, b) => (a.value > b.value ? a : b))
+        : null;
+
+    const minutesToImpact = value >= 70 ? 15 : value >= 40 ? 30 : 60;
+    const projectedLoss = Math.round((revenue / 60) * minutesToImpact);
+
+    // CRITICAL
+    if (value >= 70) {
+      return {
+        level: "CRITICAL",
+        message: `$${revenue.toLocaleString()}/hr at risk — ${
+          highestSub ? highestSub.label + " bottleneck. " : ""
+        }`,
+        impact: `Projected loss: $${projectedLoss.toLocaleString()} in next ${minutesToImpact} minutes`,
+      };
+    }
+
+    // ELEVATED
+    if (value >= 40) {
+      return {
+        level: "ELEVATED",
+        message: `$${Math.round(revenue * 0.5).toLocaleString()}/hr impact — ${
+          highestSub ? highestSub.label + " strain detected. " : ""
+        }`,
+        impact: `Escalation risk: $${projectedLoss.toLocaleString()} within ${minutesToImpact} minutes`,
+      };
+    }
+
+    // STABLE
+    return {
+      level: "STABLE",
+      message: `Operating efficiently — no revenue risk detected.`,
+      impact: `No immediate financial impact expected`,
+    };
+  };
+
+  const currentSubs = activeDept
+    ? subDepartments[activeDept.id] || []
+    : [];
+
+  const recommendation = activeDept
+    ? getRecommendation(activeDept, currentSubs)
+    : getRecommendation({
+        value:
+          departments.reduce((sum, d) => sum + d.value, 0) /
+          departments.length,
+        revenuePerHour: 2000,
+      });
+
+  /* =========================
+     UI
+  ========================= */
+
   return (
     <div className="app">
-      {viewStack.length > 1 && (
-        <button className="back" onClick={goBack}>
-          ← Back
-        </button>
+      <div className="title">⚡ NexOS Pulse</div>
+
+      {!activeDept && (
+        <>
+          <div className="radar">
+            <div className="ring r1"></div>
+            <div className="ring r2"></div>
+            <div className="ring r3"></div>
+
+            <div className="center-pulse">49</div>
+
+            {renderNodes(departments, true)}
+          </div>
+
+          <div className="recommendation">
+            <strong>{recommendation.level}</strong>
+            <br />
+            {recommendation.message}
+            <br />
+            <span className="impact">{recommendation.impact}</span>
+          </div>
+        </>
       )}
 
-      <div className="recommendations">
-        <div className="rec-title">Top Priority</div>
-
-        {topRec && (
-          <div className="rec-priority">
-            <div className="rec-main">{topRec.text}</div>
-
-            <div className="rec-financials oeo">
-              💰 OEO: ${topRec.oeo.toLocaleString()}
-            </div>
-
-            <div className="rec-financials revenue">
-              📈 Revenue Capture: ${topRec.revenue.toLocaleString()}
-            </div>
-
-            <div className="rec-financials gss">
-              ⭐ Guest Service Impact: +{topRec.gss}% GSS
-            </div>
-
-            <div className="rec-impact">
-              ⚠️ If ignored: {topRec.impact}
-            </div>
-          </div>
-        )}
-
-        <div className="rec-subtitle">Other Actions</div>
-
-        {recommendations.slice(1).map((rec, i) => (
-          <div key={i} className="rec-item">
-            {rec.text}
-          </div>
-        ))}
-      </div>
-
-      <div className={`center ${focusNode ? "zoom-target" : ""}`}>
-        <div className="pulse master" />
-        <div className="label">
-          {currentView === "master" ? "Master Pulse" : currentView}
-        </div>
-      </div>
-
-      {data[currentView]?.map((node, i) => {
-        const pos = getRadialPosition(i, data[currentView].length);
-        const focused = focusNode?.id === node.id;
-
-        return (
-          <div
-            key={node.id}
-            className={`node ${focused ? "focused" : ""}`}
-            style={{ top: pos.top, left: pos.left }}
+      {activeDept && (
+        <>
+          <button
+            className="back-button"
+            onClick={() => setActiveDept(null)}
           >
-            <div
-              className={`pulse ${getColor(node.strain)}`}
-              style={getPulseStyle(node.strain)}
-              onClick={() => goForward(node)}
-            />
-            <div className="node-label">
-              {node.id} ({Math.round(node.strain)})
+            ← Back
+          </button>
+
+          <div className="radar">
+            <div className="ring r1"></div>
+            <div className="ring r2"></div>
+            <div className="ring r3"></div>
+
+            <div className="center-pulse">
+              {activeDept.value}
             </div>
+
+            <div className="dept-title">{activeDept.label}</div>
+
+            {renderNodes(currentSubs)}
           </div>
-        );
-      })}
+
+          <div className="recommendation">
+            <strong>{recommendation.level}</strong>
+            <br />
+            {recommendation.message}
+            <br />
+            <span className="impact">{recommendation.impact}</span>
+          </div>
+        </>
+      )}
     </div>
   );
 }

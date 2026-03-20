@@ -174,15 +174,6 @@ const organization = [
     ]
   },
   {
-    name: "Club Lounge",
-    children: [
-      { name: "Mixologist" },
-      { name: "Server" },
-      { name: "Host" },
-      { name: "Attendant" }
-    ]
-  },
-  {
     name: "Spa",
     children: [
       { name: "Massage Therapist" },
@@ -245,15 +236,24 @@ const normalize = (node) => ({
   children: node.children ? node.children.map(normalize) : []
 });
 
+const calculateAggregate = (node) => {
+  if (!node.children || node.children.length === 0) return node.strain;
+  const values = node.children.map(calculateAggregate);
+  return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+};
+
 const getColor = (s) =>
   s <= 40 ? "#00e5ff" : s <= 70 ? "#ffcc00" : "#ff3b30";
 
-const getRadius = (s) =>
-  s <= 40 ? 45 : s <= 70 ? 30 : 15;
+const getRadius = (s) => {
+  const min = 18;
+  const max = 48;
+  return max - (s / 100) * (max - min);
+};
 
 const root = {
   name: "Hotel",
-  strain: 50,
+  strain: rand(),
   children: organization.map(normalize)
 };
 
@@ -262,46 +262,35 @@ const root = {
 ========================= */
 export default function App() {
   const [stack, setStack] = useState([root]);
-
   const current = stack[stack.length - 1];
+  const aggregate = calculateAggregate(current);
 
   return (
     <div className="app">
-      <div className="brand">NexOS Pulse™</div>
+      <div className="title">NexOS Pulse™</div>
 
       {stack.length > 1 && (
-        <button className="back" onClick={() => setStack(stack.slice(0, -1))}>
+        <div className="back" onClick={() => setStack(stack.slice(0, -1))}>
           ← Back
-        </button>
+        </div>
       )}
 
-      <div className="radar">
+      <div className="radar-container">
+        <div className="ring r1" />
+        <div className="ring r2" />
+        <div className="ring r3" />
+        <div className="ring r4" />
 
-        <div className="ring r1"></div>
-        <div className="ring r2"></div>
-        <div className="ring r3"></div>
-        <div className="sweep"></div>
-
-        <div className="center">
-          <div
-            className="pulse"
-            style={{
-              background:
-                stack.length === 1 ? "#00e5ff" : getColor(current.strain)
-            }}
-          />
-          <div className="center-label">{current.strain}</div>
-          <div className="center-name">{current.name}</div>
-        </div>
+        <div className="center-pulse" />
+        <div className="center-score">{aggregate}</div>
+        <div className="center-label">Hotel Aggregate Pulse</div>
 
         {(current.children || []).map((c, i) => {
-          const angle = (i / current.children.length) * 2 * Math.PI;
+          const angle = (i / current.children.length) * 2 * Math.PI - Math.PI / 2;
           const r = getRadius(c.strain);
-
           const x = 50 + r * Math.cos(angle);
           const y = 50 + r * Math.sin(angle);
-
-          const clickable = c.children && c.children.length > 0;
+          const clickable = c.children?.length > 0;
 
           return (
             <div
@@ -310,16 +299,13 @@ export default function App() {
               style={{
                 left: `${x}%`,
                 top: `${y}%`,
-                color: getColor(c.strain),
-                opacity: clickable ? 1 : 0.6
+                color: getColor(c.strain)
               }}
               onClick={() => clickable && setStack([...stack, c])}
             >
-              <div
-                className="node-pulse"
-                style={{ background: getColor(c.strain) }}
-              />
-              {c.name}
+              <div className="node-label">
+                {c.name} ({c.strain})
+              </div>
             </div>
           );
         })}

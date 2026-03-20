@@ -1,13 +1,17 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
 
 export default function App() {
   const [activeDept, setActiveDept] = useState(null);
+  const [ledger, setLedger] = useState([]);
+  const [lastLogged, setLastLogged] = useState({});
 
   const departments = [
-    { id: "kitchen", label: "Kitchen", value: 72, revenuePerHour: 2300 },
-    { id: "housekeeping", label: "Housekeeping", value: 38, revenuePerHour: 900 },
-    { id: "frontdesk", label: "Front Desk", value: 45, revenuePerHour: 1200 },
+    { id: "kitchen", label: "Kitchen", value: 72, revenuePerHour: 2300, laborPerHour: 800 },
+    { id: "housekeeping", label: "Housekeeping", value: 38, revenuePerHour: 900, laborPerHour: 500 },
+    { id: "frontdesk", label: "Front Desk", value: 45, revenuePerHour: 1200, laborPerHour: 600 },
+    { id: "engineering", label: "Engineering", value: 30, revenuePerHour: 700, laborPerHour: 400 },
+    { id: "fnb", label: "F&B Service", value: 55, revenuePerHour: 1800, laborPerHour: 700 },
   ];
 
   const subDepartments = {
@@ -23,6 +27,14 @@ export default function App() {
     frontdesk: [
       { id: "checkin", label: "Check-In", value: 50 },
       { id: "concierge", label: "Concierge", value: 30 },
+    ],
+    engineering: [
+      { id: "hvac", label: "HVAC", value: 35 },
+      { id: "electrical", label: "Electrical", value: 25 },
+    ],
+    fnb: [
+      { id: "service", label: "Service", value: 60 },
+      { id: "bar", label: "Bar", value: 45 },
     ],
   };
 
@@ -69,63 +81,75 @@ export default function App() {
     });
 
   /* =========================
-     💰 REVENUE + TIME ENGINE
+     VALUE ENGINE (LOCKED)
   ========================= */
 
-  const getRecommendation = (dept, subs = []) => {
-    const value = dept.value || 0;
-    const revenue = dept.revenuePerHour || 1500;
+  const calculateScenario = (dept) => {
+    const value = dept.value;
+    const revenue = dept.revenuePerHour;
+    const labor = dept.laborPerHour;
 
-    const highestSub =
-      subs.length > 0
-        ? subs.reduce((a, b) => (a.value > b.value ? a : b))
-        : null;
+    const minutes = value >= 70 ? 15 : 30;
 
-    const minutesToImpact = value >= 70 ? 15 : value >= 40 ? 30 : 60;
-    const projectedLoss = Math.round((revenue / 60) * minutesToImpact);
+    const beforeLoss = Math.round((revenue / 60) * minutes);
+    const afterLoss = Math.round(beforeLoss * 0.4);
 
-    // CRITICAL
-    if (value >= 70) {
-      return {
-        level: "CRITICAL",
-        message: `$${revenue.toLocaleString()}/hr at risk — ${
-          highestSub ? highestSub.label + " bottleneck. " : ""
-        }`,
-        impact: `Projected loss: $${projectedLoss.toLocaleString()} in next ${minutesToImpact} minutes`,
-      };
-    }
+    const revenueSaved = beforeLoss - afterLoss;
+    const laborSaved = Math.round((labor / 60) * (minutes * 0.2));
 
-    // ELEVATED
-    if (value >= 40) {
-      return {
-        level: "ELEVATED",
-        message: `$${Math.round(revenue * 0.5).toLocaleString()}/hr impact — ${
-          highestSub ? highestSub.label + " strain detected. " : ""
-        }`,
-        impact: `Escalation risk: $${projectedLoss.toLocaleString()} within ${minutesToImpact} minutes`,
-      };
-    }
-
-    // STABLE
     return {
-      level: "STABLE",
-      message: `Operating efficiently — no revenue risk detected.`,
-      impact: `No immediate financial impact expected`,
+      beforeLoss,
+      afterLoss,
+      total: revenueSaved + laborSaved,
     };
   };
+
+  const getConfidence = (value) => {
+    if (value >= 70) return 90;
+    if (value >= 40) return 75;
+    return 60;
+  };
+
+  /* =========================
+     CONTROLLED EVENT ENGINE
+  ========================= */
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+
+      departments.forEach((dept) => {
+        if (dept.value < 40) return;
+
+        const lastTime = lastLogged[dept.id] || 0;
+
+        // 60s cooldown per department
+        if (now - lastTime < 60000) return;
+
+        const scenario = calculateScenario(dept);
+
+        const entry = {
+          time: new Date().toLocaleTimeString(),
+          dept: dept.label,
+          before: scenario.beforeLoss,
+          after: scenario.afterLoss,
+          total: scenario.total,
+          confidence: getConfidence(dept.value),
+        };
+
+        setLedger((prev) => [entry, ...prev]);
+        setLastLogged((prev) => ({ ...prev, [dept.id]: now }));
+      });
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [lastLogged]);
+
+  const totalValue = ledger.reduce((sum, e) => sum + e.total, 0);
 
   const currentSubs = activeDept
     ? subDepartments[activeDept.id] || []
     : [];
-
-  const recommendation = activeDept
-    ? getRecommendation(activeDept, currentSubs)
-    : getRecommendation({
-        value:
-          departments.reduce((sum, d) => sum + d.value, 0) /
-          departments.length,
-        revenuePerHour: 2000,
-      });
 
   /* =========================
      UI
@@ -134,6 +158,10 @@ export default function App() {
   return (
     <div className="app">
       <div className="title">⚡ NexOS Pulse</div>
+
+      <div className="value-bar">
+        Value Created Today: ${totalValue.toLocaleString()}
+      </div>
 
       {!activeDept && (
         <>
@@ -147,12 +175,20 @@ export default function App() {
             {renderNodes(departments, true)}
           </div>
 
-          <div className="recommendation">
-            <strong>{recommendation.level}</strong>
-            <br />
-            {recommendation.message}
-            <br />
-            <span className="impact">{recommendation.impact}</span>
+          <div className="ledger">
+            <h3>Value Ledger</h3>
+
+            {ledger.slice(0, 6).map((e, i) => (
+              <div key={i} className="ledger-item">
+                <strong>{e.dept}</strong> — ${e.total}
+                <div className="ledger-detail">
+                  ${e.before} → ${e.after}
+                </div>
+                <div className="confidence">
+                  {e.confidence}% confidence
+                </div>
+              </div>
+            ))}
           </div>
         </>
       )}
@@ -178,14 +214,6 @@ export default function App() {
             <div className="dept-title">{activeDept.label}</div>
 
             {renderNodes(currentSubs)}
-          </div>
-
-          <div className="recommendation">
-            <strong>{recommendation.level}</strong>
-            <br />
-            {recommendation.message}
-            <br />
-            <span className="impact">{recommendation.impact}</span>
           </div>
         </>
       )}
